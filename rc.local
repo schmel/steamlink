@@ -1,0 +1,46 @@
+#!/bin/sh
+
+cd /home/steam
+
+export PATH=$PWD/bin:$PATH
+export LD_LIBRARY_PATH=$PWD/lib
+
+export LIBASOUND_THREAD_SAFE=0
+export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+
+# Load modules
+KERNEL_RELEASE=$(uname -r)
+# Allow custom Xbox controller drivers
+#insmod /lib/modules/${KERNEL_RELEASE}/kernel/drivers/input/joystick/xpad.ko
+insmod controller/xpad.ko
+insmod /lib/modules/${KERNEL_RELEASE}/kernel/arch/arm/mach-berlin/modules/pe/galois_pe.ko
+insmod /lib/modules/${KERNEL_RELEASE}/kernel/arch/arm/mach-berlin/modules/gpu/gfx.ko
+insmod /lib/modules/${KERNEL_RELEASE}/kernel/arch/arm/mach-berlin/modules/gpu3D/gal3d.ko contiguousSize=0x100000
+sleep 1
+ln -s /dev/graphics/gal3d /dev/gal3d
+ln -s /dev/graphics/galcore /dev/galcore
+chmod 777 /dev/galcore
+
+# Note: setting this environment variable is done to prevent having
+# PE_Single_CPU come up with one resolution, only to have the shell
+# launch and immediately switch resolutions.
+RESOLUTION_OVERRIDE_FILE=/mnt/config/system/display_resolution.txt
+if [ -f "${RESOLUTION_OVERRIDE_FILE}" ]; then
+    export PE_USER_DEFAULT_RESOLUTION=$(cat "${RESOLUTION_OVERRIDE_FILE}")
+fi
+
+# Start PE
+./bin/PE_Single_CPU >/mnt/scratch/log/PE_server.log 2>&1 &
+
+# Enable core dumps and set core dump output path
+CORE_PATH=/mnt/scratch/tmp
+mkdir -p $CORE_PATH
+echo "$CORE_PATH/core.%e" >/proc/sys/kernel/core_pattern
+ulimit -c unlimited
+
+./emustation.sh
+
+# Start power manager, which will start the application if appropriate
+./bin/powermanager.sh &
+
+
